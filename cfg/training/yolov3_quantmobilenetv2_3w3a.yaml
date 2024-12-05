@@ -1,0 +1,68 @@
+# parameters
+nc: 80  # number of classes
+depth_multiple: 1.0  # model depth multiple
+width_multiple: 1.0  # layer channel multiple
+
+# anchors
+anchors:
+  - [4.44404,5.15276, 6.65391,12.68005, 16.85886,11.62541]  # P3/8
+  - [12.61329,28.03545, 29.57863,24.41428, 27.40342,56.43731]  # P4/16
+  - [60.01981,44.07985, 68.43409,104.58282, 160.04944,129.78752]  # P5/32
+
+# mobilenetv2 backbone
+backbone:
+  # [from, number, module, args]
+  # Conv args [filters, ksize, stride]
+  # QuantConvBNReLU args [filters, ksize, stride=1, padding=None, weight_bitts=8, act_bits=8, groups=1]
+  # QuantInvertedResidual args [out_channels, stride, expand_ratio, weight_bits=8, act_bits=8]
+  [[-1, 1, QuantConvBNReLU, [32, 3, 2]],          # 0 stride 2
+
+   [-1, 1, QuantInvertedResidual, [16, 1, 1, 3, 3]],
+
+   [-1, 1, QuantInvertedResidual, [24, 2, 6, 3, 3]],    # 2 stride 4
+   [-1, 1, QuantInvertedResidual, [24, 1, 6, 3, 3]],
+
+   [-1, 1, QuantInvertedResidual, [32, 2, 6, 3, 3]],    # 4 stride 8
+   [-1, 2, QuantInvertedResidual, [32, 1, 6, 3, 3]],
+
+   [-1, 1, QuantInvertedResidual, [64, 2, 6, 3, 3]],        # 6 stride 16
+   [-1, 3, QuantInvertedResidual, [64, 1, 6, 3, 3]],
+
+   [-1, 1, QuantInvertedResidual, [96, 1, 6, 3, 3]],       # 8 stride 16
+   [-1, 2, QuantInvertedResidual, [96, 1, 6, 3, 3]],
+
+   [-1, 1, QuantInvertedResidual, [160, 2, 6, 3, 3]],      # 10 stride 32
+   [-1, 2, QuantInvertedResidual, [160, 1, 6, 3, 3]],  
+
+   [-1, 1, QuantInvertedResidual, [320, 1, 6, 3, 3]],     # 12 stride 32
+
+   [-1, 1, QuantConvBNReLU, [1024, 1, 1, None, 3, 3]],          # 13 stride 32
+  ]
+
+
+# YOLOv3 head
+head:
+  [[-1, 1, QuantInvertedResidual, [1024, 1, 0.5]],
+   [-1, 1, QuantConvBNReLU, [512, 1, 1]],
+   [-1, 1, QuantConvBNReLU, [1024, 3, 1]],
+   [-1, 1, QuantConvBNReLU, [512, 1, 1]],
+   [-1, 1, QuantConvBNReLU, [1024, 3, 1]],  # 18 (P5/32-large)
+
+   [-2, 1, QuantConvBNReLU, [256, 1, 1]],
+   [-1, 1, nn.Upsample, [None, 2, 'nearest']],
+   [[-1, 9], 1, Concat, [1]],  # cat backbone P4
+   [-1, 1, QuantInvertedResidual, [512, 1, 0.5]],
+   [-1, 1, QuantInvertedResidual, [512, 1, 0.5]],
+   [-1, 1, QuantConvBNReLU, [256, 1, 1]],
+   [-1, 1, QuantConvBNReLU, [512, 3, 1]],  # 25 (P4/16-medium)
+
+   [-2, 1, QuantConvBNReLU, [128, 1, 1]],
+   [-1, 1, nn.Upsample, [None, 2, 'nearest']],
+   [[-1, 5], 1, Concat, [1]],  # cat backbone P3
+   [-1, 1, QuantInvertedResidual, [256, 1, 0.5]],
+   [-1, 2, QuantInvertedResidual, [256, 1, 0.5]],  # 30 (P3/8-small)
+
+   [[30, 25, 18], 1, QuantDetect, [nc, anchors]],   # Detect(P3, P4, P5)
+  ]
+
+

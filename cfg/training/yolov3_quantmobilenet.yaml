@@ -1,0 +1,63 @@
+# parameters
+nc: 80  # number of classes
+depth_multiple: 1.0  # model depth multiple
+width_multiple: 1.0  # layer channel multiple
+
+# anchors
+anchors:
+  - [12,16, 19,36, 40,28]  # P3/8
+  # - [36,75, 76,55, 72,146]  # P4/16
+  # - [142,110, 192,243, 459,401]  # P5/32
+
+# darknet53 backbone
+# backbone:
+#   # [from, number, module, args]
+#   # Conv args [filters, ksize, stride]
+#   [[-1, 1, Conv, [32, 3, 1]],  # 0
+#    [-1, 1, Conv, [64, 3, 2]],  # 1-P1/2
+#    [-1, 1, Bottleneck, [64]],
+#    [-1, 1, Conv, [128, 3, 2]],  # 3-P2/4
+#    [-1, 2, Bottleneck, [128]],
+#    [-1, 1, Conv, [256, 3, 2]],  # 5-P3/8
+#    [-1, 8, Bottleneck, [256]],
+#    [-1, 1, Conv, [512, 3, 2]],  # 7-P4/16
+#    [-1, 8, Bottleneck, [512]],
+#    [-1, 1, Conv, [1024, 3, 2]],  # 9-P5/32
+#    [-1, 4, Bottleneck, [1024]],  # 10
+#   ]
+
+# quant mobilenet backbone
+backbone:
+# [from, number, module, args]
+# Conv args [filters, ksize, stride]
+# QuantConvBlock args [filters, ksize, stride=1, padding='same', weight_bitwidth=8, act_bitwidth=8]
+  [
+    [-1, 1, ConvBlockQuant, [32, 3, 2]],
+    [-1, 1, DwsConvBlockQuant, [64, 3, 1]],
+
+    [-1, 1, DwsConvBlockQuant, [128, 3, 2]],
+    [-1, 1, DwsConvBlockQuant, [128, 3, 1]],
+
+    [-1, 1, DwsConvBlockQuant, [256, 3, 2]],
+    [-1, 1, DwsConvBlockQuant, [256, 3, 1]],
+    [-1, 1, DwsConvBlockQuant, [256, 3, 1]],
+    [-1, 1, DwsConvBlockQuant, [256, 3, 1]],
+
+    [-1, 1, DwsConvBlockQuant, [512, 3, 2]],
+    [-1, 1, DwsConvBlockQuant, [512, 3, 1]],
+    [-1, 1, DwsConvBlockQuant, [512, 3, 1]],
+    [-1, 1, DwsConvBlockQuant, [512, 3, 1]],
+    [-1, 1, DwsConvBlockQuant, [512, 3, 1]],
+    [-1, 1, DwsConvBlockQuant, [512, 3, 1]],
+    [-1, 1, DwsConvBlockQuant, [512, 3, 1]],
+    [-1, 1, DwsConvBlockQuant, [512, 3, 1]],
+
+    [-1, 1, DwsConvBlockQuant, [1024, 3, 2]],
+    [-1, 1, DwsConvBlockQuant, [1024, 3, 1]]
+  ]
+
+# YOLOv3 head
+head:
+  [
+   [[-1], 1, Detect, [nc, anchors]],   
+  ]

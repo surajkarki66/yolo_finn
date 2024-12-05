@@ -1,0 +1,7 @@
+
+train: ./ua-detrac/images/train
+val: ./ua-detrac/images/val
+test:
+
+nc: 4
+names: ['others', 'car', 'van', 'bus']
