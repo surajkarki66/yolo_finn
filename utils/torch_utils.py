@@ -293,9 +293,11 @@ class ModelEMA:
     def update(self, model):
         # Update EMA parameters
         with torch.no_grad():
+            new_keys = False
             self.updates += 1
             d = self.decay(self.updates)
             msd = model.module.state_dict() if is_parallel(model) else model.state_dict()  # model state_dict
+            ema_msd = self.ema.state_dict()
             for k, v in self.ema.state_dict().items():
                 # for Brevitas activation scales, keep the newest value
                 if self.overwrite_quant_scales and '.tensor_quant.scaling_impl.value' in k:
@@ -306,6 +308,14 @@ class ModelEMA:
                     v = v.to(self.device)
                     v *= scale
                     v += (1. - scale) * msd[k].detach()
+            for k, v in msd.items():
+                if k not in ema_msd:
+                    new_keys = True
+                    print('adding', k, 'to ema')
+                    ema_msd[k] = v
+            if new_keys:
+                print('LOADED')
+                self.ema.load_state_dict(ema_msd)
 
     def update_attr(self, model, include=(), exclude=('process_group', 'reducer')):
         # Update EMA attributes
