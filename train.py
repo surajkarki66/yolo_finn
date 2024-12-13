@@ -221,8 +221,7 @@ def train(hyp, opt, device, tb_writer=None):
     else:
         lf = one_cycle(1, hyp['lrf'], epochs)  # cosine 1->hyp['lrf']
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
-    plot_lr_scheduler(optimizer, scheduler, epochs)
-
+    # plot_lr_scheduler(optimizer, scheduler, epochs, save_dir=save_dir)
 
     # EMA
     ema = ModelEMA(model, average_quant_scales=opt.ema_average_quant_scales) if rank in [-1, 0] else None
@@ -231,13 +230,13 @@ def train(hyp, opt, device, tb_writer=None):
     start_epoch, best_fitness = 0, 0.0
     if pretrained:
         # Optimizer
-        print('fresh optimizer:', opt.fresh_optimizer)
         if ckpt['optimizer'] is not None and not opt.fresh_optimizer:
             optimizer.load_state_dict(ckpt['optimizer'])
         else:
             print('WARNING: ignoring optimizer state from checkpoint')
             
         if opt.resume:
+            start_epoch = ckpt['epoch'] + 1
             best_fitness = ckpt['best_fitness']
             print('Best fitness:', best_fitness)
 
@@ -254,13 +253,13 @@ def train(hyp, opt, device, tb_writer=None):
             results_file.write_text(ckpt['training_results'])  # write results.txt
 
         # Epochs
-        start_epoch = ckpt['epoch'] + 1
-        if opt.resume:
-            assert start_epoch > 0, '%s training to %g epochs is finished, nothing to resume.' % (weights, epochs)
-        if epochs < start_epoch:
-            logger.info('%s has been trained for %g epochs. Fine-tuning for %g additional epochs.' %
-                        (weights, ckpt['epoch'], epochs))
-            epochs += ckpt['epoch']  # finetune additional epochs
+        
+        # if opt.resume:
+        #     assert start_epoch > 0, '%s training to %g epochs is finished, nothing to resume.' % (weights, epochs)
+        # if epochs < start_epoch:
+        #     logger.info('%s has been trained for %g epochs. Fine-tuning for %g additional epochs.' %
+        #                 (weights, ckpt['epoch'], epochs))
+        #     epochs += ckpt['epoch']  # finetune additional epochs
 
         del ckpt
     else:
@@ -455,7 +454,7 @@ def train(hyp, opt, device, tb_writer=None):
                 pbar.set_description(s)
 
                 # Plot
-                if plots and ni == 0:
+                if plots and ni < 5:
                     f = save_dir / f'train_batch{ni}.jpg'  # filename
                     Thread(target=plot_images, args=(imgs, targets, paths, f), daemon=True).start()
                     # if tb_writer:
