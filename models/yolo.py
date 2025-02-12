@@ -729,7 +729,7 @@ class Model(nn.Module):
             # print([el.shape for el in x] if isinstance(x, list) else x.shape)
             x = m(x)  # run
             if i in self.features_to_save:
-                print('saving features[{}]: '.format(i), type(m).__name__)
+                # print('saving features[{}]: '.format(i), type(m).__name__)
                 self.saved_features.append(x)
             
             y.append(x if m.i in self.save else None)  # save output

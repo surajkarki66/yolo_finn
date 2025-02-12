@@ -41,7 +41,6 @@ def test(data,
          wandb_logger=None,
          compute_loss=None,
          half_precision=False,
-         trace=False,
          is_coco=False,
          v5_metric=False):
     
@@ -69,9 +68,6 @@ def test(data,
         model, _, _ = get_model(cfg, weights, nc, device, load_ema=True)
         gs = max(int(model.stride.max()), 32)  # grid size (max stride)
         # imgsz = check_img_size(imgsz, s=gs)  # check img_size
-        
-        if trace:
-            model = TracedModel(model, device, imgsz)
 
     # Half
     half = device.type != 'cpu' and half_precision  # half precision only supported on CUDA
@@ -319,7 +315,6 @@ if __name__ == '__main__':
     parser.add_argument('--project', default='runs/test', help='save to project/name')
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
-    parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
     opt = parser.parse_args()
     opt.save_json |= opt.data.endswith('coco.yaml')
@@ -346,7 +341,6 @@ if __name__ == '__main__':
              save_txt=opt.save_txt | opt.save_hybrid,
              save_hybrid=opt.save_hybrid,
              save_conf=opt.save_conf,
-             trace=not opt.no_trace,
              v5_metric=opt.v5_metric
              )
 

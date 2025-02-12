@@ -25,8 +25,7 @@ from utils.torch_utils import select_device, load_classifier, time_synchronized,
 
 
 def detect(save_img=False):
-    source, weights, cfg, view_img, save_txt, imgsz, trace, mot_format, classes = opt.source, opt.weights, opt.cfg, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace, opt.mot_format, opt.classes
-    save_img = not opt.nosave and not source.endswith('.txt')  # save inference images
+    source, weights, cfg, view_img, save_txt, save_img, imgsz, trace, mot_format, classes = opt.source, opt.weights, opt.cfg, opt.view_img, opt.save_txt, opt.save_img, opt.img_size, not opt.no_trace, opt.mot_format, opt.classes
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
         ('rtsp://', 'rtmp://', 'http://', 'https://'))
 
@@ -93,9 +92,12 @@ def detect(save_img=False):
         seq_save_dir = save_dir / seqname
         mot_txt_path = seq_save_dir / 'det' / 'det.txt'
         savedimg_path = seq_save_dir / 'img'
+        savedfeatures_path = seq_save_dir / 'features'
         os.makedirs(seq_save_dir / 'det')
+        if opt.save_features:
+            os.makedirs(savedfeatures_path)
         if save_img:
-            os.makedirs(seq_save_dir / 'img')
+            os.makedirs(savedimg_path)
         dataset = LoadImages(os.path.join(source, seqname, 'img1'), img_size=imgsz, stride=stride)
         t0 = time.time()
         nms = non_max_suppression
@@ -104,10 +106,7 @@ def detect(save_img=False):
             nms = last_layer.dedicated_nms
         key = None
         for frame_idx, (path, img, im0s, vid_cap) in enumerate(dataset):
-            print('img:', img.shape)
-            exp_dir = '/home/vision/danilowi/serious_mot/finn/notebooks/experiments/yolov8'
             test_input_np = img.copy()
-            # cv2.imshow('img', img.transpose(1, 2, 0))
             img = torch.from_numpy(img).to(device)
             img = img.half() if half else img.float()  # uint8 to fp16/32
             img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -127,8 +126,6 @@ def detect(save_img=False):
             with torch.no_grad():   # Calculating gradients would cause a GPU memory leak
                 pred, x = model(img, augment=opt.augment)
             t2 = time_synchronized()
-            print('PRED:', pred.shape)
-            print(pred)
 
             # Apply NMS
             pred = nms(pred, opt.conf_thres, opt.iou_thres, agnostic=opt.agnostic_nms)
@@ -178,39 +175,26 @@ def detect(save_img=False):
                     cv2.imshow('demo', im0)
                     key = cv2.waitKey(0)
                     if key == ord('v'):
-                        np.save(exp_dir + '/test_input_{}x{}.npy'.format(test_input_np.shape[1], test_input_np.shape[2]), np.expand_dims(test_input_np, 0))
+                        np.save(save_dir + '/test_input_{}x{}.npy'.format(test_input_np.shape[1], test_input_np.shape[2]), np.expand_dims(test_input_np, 0))
                         print("IMAGE SAVED")
                         if model.saved_features:
                             for i, f in enumerate(model.saved_features):
-                                np.save(exp_dir + '/{}_f{}.npy'.format(opt.name, i), f.detach().cpu())
+                                np.save(save_dir + '/{}_f{}.npy'.format(opt.name, i), f.detach().cpu())
                         for out_idx, out in enumerate(x):
-                            np.save(exp_dir + '/{}_trainout{}.npy'.format(opt.name, out_idx), out.detach().cpu())
+                            np.save(save_dir + '/{}_trainout{}.npy'.format(opt.name, out_idx), out.detach().cpu())
                         print('FEATURES SAVED')
                         key = cv2.waitKey(0)
-
-
 
                 # Save results (image with detections)
                 if save_img:
                     cv2.imwrite(save_path, im0)
                     print(save_path, 'saved')
-                    # if dataset.mode == 'image':
-                    #     cv2.imwrite(save_path, im0)
-                    #     # print(f" The image with the result is saved in: {save_path}")
-                    # else:  # 'video' or 'stream'
-                    #     if vid_path != save_path:  # new video
-                    #         vid_path = save_path
-                    #         if isinstance(vid_writer, cv2.VideoWriter):
-                    #             vid_writer.release()  # release previous video writer
-                    #         if vid_cap:  # video
-                    #             fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                    #             w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    #             h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    #         else:  # stream
-                    #             fps, w, h = 30, im0.shape[1], im0.shape[0]
-                    #             save_path += '.mp4'
-                    #         vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                    #     vid_writer.write(im0)
+
+                if opt.save_features:
+                    if model.saved_features:
+                        for i, f in enumerate(model.saved_features):
+                            np.save(savedfeatures_path / 'frame{}_f{}.npy'.format(frame_idx, i), f.detach().cpu())
+
             if key == ord('s') or key == ord('q'):
                 break
         if key == ord('q'):
@@ -220,7 +204,7 @@ def detect(save_img=False):
         #     s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         #     #print(f"Results saved to {save_dir}{s}")
 
-        print(f'Done. ({time.time() - t0:.3f}s)')
+        print(f'{seqname} done. ({time.time() - t0:.3f}s)')
 
 
 if __name__ == '__main__':
@@ -236,7 +220,7 @@ if __name__ == '__main__':
     parser.add_argument('--view-img', action='store_true', help='display results')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
-    parser.add_argument('--nosave', action='store_true', help='do not save images/videos')
+    parser.add_argument('--save-img', action='store_true', help='save visualized detections')
     parser.add_argument('--classes', nargs='+', type=int, default=[], help='filter by class: --classes 0, or --classes 0 2 3')
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
@@ -246,6 +230,7 @@ if __name__ == '__main__':
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
     parser.add_argument('--mot-format', action='store_true', help='output detections to txt file in mot format')
+    parser.add_argument('--save-features', action='store_true', help='save intermediate features to output dir')
     opt = parser.parse_args()
     print(opt)
     #check_requirements(exclude=('pycocotools', 'thop'))
