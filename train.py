@@ -45,6 +45,7 @@ def train(hyp, opt, device, tb_writer=None):
     logger.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
     save_dir, epochs, batch_size, total_batch_size, weights, rank, freeze = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.total_batch_size, opt.weights, opt.global_rank, opt.freeze
+    use_ema = not opt.no_ema
 
     # Directories
     wdir = save_dir / 'weights'
@@ -145,8 +146,9 @@ def train(hyp, opt, device, tb_writer=None):
     # plot_lr_scheduler(optimizer, scheduler, epochs, save_dir=save_dir)
     
     # EMA
-    ema = ModelEMA(model, average_quant_scales=opt.ema_average_quant_scales) if rank in [-1, 0] else None
-
+    if use_ema:
+        ema = ModelEMA(model, average_quant_scales=opt.ema_average_quant_scales) if rank in [-1, 0] else None
+ 
     # Resume
     start_epoch, best_fitness = 0, 0.0
     if pretrained:
@@ -157,14 +159,13 @@ def train(hyp, opt, device, tb_writer=None):
             print('WARNING: ignoring optimizer state from checkpoint')
             
         if opt.resume:
-            start_epoch = ckpt['epoch'] + 1
             best_fitness = ckpt['best_fitness']
             print('Best fitness:', best_fitness)
 
         # EMA
-        if ema and ckpt.get('ema'):
+        if use_ema and ema and ckpt.get('ema'):
             if not arch_changed and not opt.fresh_ema:
-                ema.ema.load_state_dict(ckpt['ema'])
+                ema.ema.load_state_dict(ckpt['ema'], strict=False)
                 ema.updates = ckpt['updates']
             else:
                 print('WARNING: ignoring ema state from checkpoint')
@@ -174,7 +175,7 @@ def train(hyp, opt, device, tb_writer=None):
             results_file.write_text(ckpt['training_results'])  # write results.txt
 
         # Epochs
-        
+        start_epoch = ckpt['epoch'] + 1
         # if opt.resume:
         #     assert start_epoch > 0, '%s training to %g epochs is finished, nothing to resume.' % (weights, epochs)
         # if epochs < start_epoch:
@@ -395,14 +396,15 @@ def train(hyp, opt, device, tb_writer=None):
         # DDP process 0 or single-GPU
         if rank in [-1, 0]:
             # mAP
-            ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride', 'class_weights'])
+            if use_ema:
+                ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride', 'class_weights'])
             final_epoch = epoch + 1 == epochs
             if not opt.notest or final_epoch:  # Calculate mAP
                 wandb_logger.current_epoch = epoch + 1
                 results, maps, times = test.test(data_dict,
                                                  batch_size=batch_size,
                                                  imgsz=imgsz_test,
-                                                 model=ema.ema,
+                                                 model=ema.ema if use_ema else deepcopy(model.module if is_parallel(model) else model).eval(),
                                                 #  model=deepcopy(model.module if is_parallel(model) else model).eval(),
                                                  single_cls=opt.single_cls,
                                                  dataloader=testloader,
@@ -446,7 +448,7 @@ def train(hyp, opt, device, tb_writer=None):
                         'training_results': results_file.read_text(),
                         # 'model': deepcopy(model.module if is_parallel(model) else model).half(),
                         'model': model.state_dict(),
-                        'ema': ema.ema.state_dict(),
+                        'ema': ema.ema.state_dict() if use_ema else None,
                         'updates': ema.updates,
                         'optimizer': optimizer.state_dict(),
                         'wandb_id': wandb_logger.wandb_run.id if wandb_logger.wandb else None}
@@ -540,7 +542,7 @@ if __name__ == '__main__':
     parser.add_argument('--single-cls', action='store_true', help='train multi-class data as single-class')
     parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
     parser.add_argument('--sync-bn', action='store_true', help='use SyncBatchNorm, only available in DDP mode')
-    parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
+    parser.add_argument('--local-rank', type=int, default=-1, help='DDP parameter, do not modify')
     parser.add_argument('--workers', type=int, default=8, help='maximum number of dataloader workers')
     parser.add_argument('--project', default='runs/train', help='save to project/name')
     parser.add_argument('--entity', default=None, help='W&B entity')
@@ -561,6 +563,7 @@ if __name__ == '__main__':
     parser.add_argument('--freeze_bn_stats', action='store_true')
     parser.add_argument('--ema_average_quant_scales', action='store_true', help='whether to average quant activations scales in EMA')
     parser.add_argument('--train_quant_scales', action='store_true')
+    parser.add_argument('--no_ema', action='store_true')
     opt = parser.parse_args()
 
     # Set DDP variables
