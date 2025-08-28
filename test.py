@@ -65,7 +65,7 @@ def test(data,
         (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
 
         # Load model        
-        model, _, _ = get_model(cfg, weights, nc, device, load_ema=True)
+        model, _, _ = get_model(cfg, weights, nc, device, load_ema=opt.load_ema)
         gs = max(int(model.stride.max()), 32)  # grid size (max stride)
         # imgsz = check_img_size(imgsz, s=gs)  # check img_size
 
@@ -316,6 +316,7 @@ if __name__ == '__main__':
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
+    parser.add_argument('--load_ema', action='store_true')
     opt = parser.parse_args()
     opt.save_json |= opt.data.endswith('coco.yaml')
     opt.data = check_file(opt.data)  # check file
