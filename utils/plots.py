@@ -397,12 +397,14 @@ def plot_results_overlay(start=0, stop=0):  # from utils.plots import *; plot_re
         fig.savefig(f.replace('.txt', '.png'), dpi=200)
 
 
-def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir='', header=False):
+# RESULTS_TAGS = ('Epoch', 'gpu_mem', 'box', 'cls', 'dfl', 'labels', 'img_size', 'MP', 'MR', 'mAP50', 'mAP', 'box_val', 'obj_val', 'cls_val', 'ema_MP', 'ema_MR', 'ema_mAP50', 'ema_mAP', 'ema_box_val', 'ema_obj_val', 'ema_cls_val', 'lr0', 'lr1', 'lr2')
+def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir='', header=False, plot_ema=False):
     # Plot training 'results*.txt'. from utils.plots import *; plot_results(save_dir='runs/train/exp')
-    fig, ax = plt.subplots(2, 5, figsize=(12, 6), tight_layout=True)
+    fig, ax = plt.subplots(3, 5, figsize=(15, 9), tight_layout=True)
     ax = ax.ravel()
     s = ['Box loss', 'Classification loss', 'DFL loss', 'Precision', 'Recall',
-         'val Box loss', 'val Classification loss', 'val DFL loss', 'mAP@0.5', 'mAP@0.5:0.95']
+         'val Box loss', 'val Classification loss', 'val DFL loss', 'mAP@0.5', 'mAP@0.5:0.95',
+         'lr_gr0', 'lr_gr1', 'lr_gr2']
     if bucket:
         # files = ['https://storage.googleapis.com/%s/results%g.txt' % (bucket, x) for x in id]
         files = ['results%g.txt' % x for x in id]
@@ -413,23 +415,41 @@ def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir='', head
     assert len(files), 'No results.txt files found in %s, nothing to plot.' % os.path.abspath(save_dir)
     for fi, f in enumerate(files):
         try:
-            results = np.loadtxt(f, usecols=[2, 3, 4, 7, 8, 11, 12, 13, 9, 10], ndmin=2, skiprows = 1 if header else 0).T
+            train_cols = [2, 3, 4]
+            val_cols = [7, 8, 11, 12, 13, 9, 10] # MP, MR, box_val, obj_val, cls_val, mAP50, mAP
+            lr_cols = [21, 22, 23]
+            ema_cols = [14, 15, 18, 19, 20, 16, 17]
+            loss_cols = train_cols + [11, 12, 13, 18, 19, 20]
+            titled_cols = train_cols + val_cols + lr_cols
+            ema_cols_offset = len(val_cols) + len(lr_cols)
+            usecols = train_cols + val_cols + lr_cols
+            if plot_ema:
+                usecols += ema_cols
+            results = np.loadtxt(f, usecols=usecols, ndmin=2, skiprows = 1 if header else 0).T
             n = results.shape[1]  # number of rows
             x = range(start, min(stop, n) if stop else n)
-            for i in range(10):
+            # train losses
+            for i in range(len(usecols)):
                 y = results[i, x]
-                if i in [0, 1, 2, 5, 6, 7]:
+                if usecols[i] in loss_cols:
                     y[y == 0] = np.nan  # don't show zero loss values
                     # y /= y[0]  # normalize
-                label = labels[fi] if len(labels) else f.stem
-                ax[i].plot(x, y, marker='.', label=label, linewidth=2, markersize=8)
-                ax[i].set_title(s[i])
+                if usecols[i] in ema_cols:
+                    ax[i - ema_cols_offset].plot(x, y, marker='.', label='ema', linewidth=1, markersize=6)
+                    ax[i - ema_cols_offset].legend()
+                else:
+                    label = labels[fi] if len(labels) else f.stem
+                    ax[i].plot(x, y, marker='.', label=label, linewidth=2, markersize=6)
+                    ax[i].grid()
+                    if usecols[i] in titled_cols:
+                        ax[i].set_title(s[i])
                 # if i in [5, 6, 7]:  # share train and val loss y axes
                 #     ax[i].get_shared_y_axes().join(ax[i], ax[i - 5])
         except Exception as e:
             print('Warning: Plotting error for %s; %s' % (f, e))
 
-    ax[1].legend()
+    ax[-1].set_visible(False)
+    ax[-2].set_visible(False)
     fig.savefig(Path(save_dir) / 'results.png', dpi=200)
     
     

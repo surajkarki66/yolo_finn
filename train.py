@@ -185,8 +185,8 @@ def train(hyp, opt, device, tb_writer=None):
 
         del ckpt
     else:
-        RESULTS_TAGS = ('Epoch', 'gpu_mem', 'box', 'cls', 'dfl', 'labels', 'img_size', 'MP', 'MR', 'mAP50', 'mAP', 'box_val', 'obj_val', 'cls_val')
-        header = '%10s' * len(RESULTS_TAGS) % RESULTS_TAGS
+        RESULTS_TAGS = ('Epoch', 'gpu_mem', 'box', 'cls', 'dfl', 'labels', 'img_size', 'MP', 'MR', 'mAP50', 'mAP', 'box_val', 'obj_val', 'cls_val', 'ema_MP', 'ema_MR', 'ema_mAP50', 'ema_mAP', 'ema_box_val', 'ema_obj_val', 'ema_cls_val', 'lr0', 'lr1', 'lr2')
+        header = '%14s' * len(RESULTS_TAGS) % RESULTS_TAGS
         results_file.write_text(header + '\n')
 
     # Image sizes
@@ -316,8 +316,6 @@ def train(hyp, opt, device, tb_writer=None):
             pbar = tqdm(pbar, total=nb)  # progress bar
         optimizer.zero_grad()
 
-        print('EPOCH START, lr:', optimizer.param_groups[0]['lr'])
-
         for i, (imgs, targets, paths, _) in pbar:  # batch -------------------------------------------------------------
             ni = i + nb * epoch  # number integrated batches (since train start)
             imgs = imgs.to(device, non_blocking=True).float() / 255.0  # uint8 to float32, 0-255 to 0.0-1.0
@@ -371,7 +369,7 @@ def train(hyp, opt, device, tb_writer=None):
             if rank in [-1, 0]:
                 mloss = (mloss * i + loss_items[:3]) / (i + 1)  # update mean losses
                 mem = '%.3gG' % (torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0)  # (GB)
-                s = ('%10s' * 2 + '%10.4g' * 5) % (
+                s = ('%14s' * 2 + '%14.4g' * 5) % (
                     '%g/%g' % (epoch, epochs - 1), mem, *mloss, targets.shape[0], imgs.shape[-1])
                 pbar.set_description(s)
 
@@ -404,7 +402,7 @@ def train(hyp, opt, device, tb_writer=None):
                 results, maps, times = test.test(data_dict,
                                                  batch_size=batch_size,
                                                  imgsz=imgsz_test,
-                                                 model=ema.ema if use_ema else deepcopy(model.module if is_parallel(model) else model).eval(),
+                                                 model=deepcopy(model.module if is_parallel(model) else model).eval(),
                                                 #  model=deepcopy(model.module if is_parallel(model) else model).eval(),
                                                  single_cls=opt.single_cls,
                                                  dataloader=testloader,
@@ -416,11 +414,30 @@ def train(hyp, opt, device, tb_writer=None):
                                                  is_coco=is_coco,
                                                  v5_metric=opt.v5_metric)
                 
-            
+                if use_ema:
+                    ema_results, ema_maps, ema_times = test.test(data_dict,
+                                                    batch_size=batch_size,
+                                                    imgsz=imgsz_test,
+                                                    model=ema.ema,
+                                                    #  model=deepcopy(model.module if is_parallel(model) else model).eval(),
+                                                    single_cls=opt.single_cls,
+                                                    dataloader=testloader,
+                                                    save_dir=save_dir,
+                                                    verbose=nc < 50 and final_epoch,
+                                                    plots=plots and final_epoch,
+                                                    wandb_logger=wandb_logger,
+                                                    compute_loss=dedicated_loss or compute_loss,
+                                                    is_coco=is_coco,
+                                                    v5_metric=opt.v5_metric)
+                else:
+                    ema_results = [0] * 7
 
             # Write
             with open(results_file, 'a') as f:
-                f.write(s + '%10.4g' * 7 % results + '\n')  # append metrics, val_loss
+                f.write(s + '%14.4g' * len(results) % results
+                        + '%14.4g' * len(ema_results) % ema_results
+                        + '%14.4g' * len(lr) % tuple(lr)
+                        + '\n')  # append metrics, val_loss
             if len(opt.name) and opt.bucket:
                 os.system('gsutil cp %s gs://%s/results/results%s.txt' % (results_file, opt.bucket, opt.name))
 
@@ -473,7 +490,7 @@ def train(hyp, opt, device, tb_writer=None):
                 del ckpt
             
             if plots:
-                plot_results(save_dir=save_dir, header=True)  # save as results.png
+                plot_results(save_dir=save_dir, header=True, plot_ema=use_ema)  # save as results.png
         # end epoch ----------------------------------------------------------------------------------------------------
     # end training
     if rank in [-1, 0]:
