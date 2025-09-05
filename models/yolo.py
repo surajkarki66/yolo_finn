@@ -845,6 +845,7 @@ def parse_model(d, ch, backbone_only=False):  # model_dict, input_channels(3)
     logger.info('\n%3s%18s%3s%10s  %-40s%-30s' % ('', 'from', 'n', 'params', 'module', 'arguments'))
     anchors, nc, gd, gw = d.get('anchors'), d['nc'], d['depth_multiple'], d['width_multiple']
     common_activations = d.get("common_activations")
+    act = d.get("activation")
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
     # no = na * (nc + 5)  # number of outputs = anchors * (classes + 5)
 
@@ -864,6 +865,10 @@ def parse_model(d, ch, backbone_only=False):  # model_dict, input_channels(3)
                                                     scaling_per_channel=False,
                                                     return_quant_tensor=False)
 
+    if act:
+        print('USING', act, 'for Conv activation')
+        Conv.default_act = eval(act)
+    
     if backbone_only:
         to_parse = d['backbone']
     else:
