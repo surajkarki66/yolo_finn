@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import yaml
 from tqdm import tqdm
-
+from thop import profile
 from models.yolo import get_model
 from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_file, check_img_size, check_requirements, \
@@ -287,6 +287,26 @@ def test(data,
     if not training:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         print(f"Results saved to {save_dir}{s}")
+        dummy_input = torch.randn(1, 3, imgsz, imgsz).to(device)
+        macs, _ = profile(model, inputs=(dummy_input,), verbose=False)
+    
+        metrics_dict = {
+            "precision": float(mp),
+            "recall": float(mr),
+            "mAP@0.5": float(map50),
+            "mAP@0.5:0.95": float(map),
+            "speed_ms_inference": float(t[0]),
+            "speed_ms_nms": float(t[1]),
+            "speed_ms_total": float(t[2]),
+            "number_of_macs": float(macs),
+            "image_size": (imgsz, imgsz),
+            "batch_size": batch_size,
+            "per_class_map": {names[c]: float(ap[i]) for i, c in enumerate(ap_class)}
+        }
+        metrics_json_path = save_dir / "test_metrics.json"
+        with open(metrics_json_path, "w") as f:
+            json.dump(metrics_dict, f, indent=4)
+        print(f"Test metrics saved to {metrics_json_path}")
     maps = np.zeros(nc) + map
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
