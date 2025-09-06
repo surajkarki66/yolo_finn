@@ -102,9 +102,11 @@ class WandbLogger():
             if self.job_type == 'Training':
                 if not opt.resume:
                     wandb_data_dict = self.check_and_upload_dataset(opt) if opt.upload_dataset else data_dict
-                    # Info useful for resuming from artifacts
-                    self.wandb_run.config.opt = vars(opt)
-                    self.wandb_run.config.data_dict = wandb_data_dict
+                    # ✅ use update instead of direct assignment
+                    self.wandb_run.config.update(
+                        {"opt": vars(opt), "data_dict": wandb_data_dict},
+                        allow_val_change=True
+                    )
                 self.data_dict = self.setup_training(opt, data_dict)
             if self.job_type == 'Dataset Creation':
                 self.data_dict = self.check_and_upload_dataset(opt)
