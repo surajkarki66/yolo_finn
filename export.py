@@ -49,25 +49,3 @@ model = model.transform(GiveReadableTensorNames())
 model = cleanup_model(model)
 model.save(exported_filename)
 print('Model exported as', exported_filename)
-# model = model.transform(ConvertQONNXtoFINN())
-
-# add preprocessing
-# global_inp_name = model.graph.input[0].name
-# ishape = model.get_tensor_shape(global_inp_name)
-# chkpt_preproc_name = join(build_dir, "preproc.onnx")
-# export_qonnx(ToTensor(), torch.randn(ishape), chkpt_preproc_name)
-# pre_model = ModelWrapper(chkpt_preproc_name)
-# pre_model = cleanup_model(pre_model)
-# # pre_model = pre_model.transform(ConvertQONNXtoFINN())
-# model = model.transform(MergeONNXModels(pre_model))
-# model.set_tensor_datatype(global_inp_name, DataType["UINT8"])
-
-# model.save(exported_filename)
-
-# # final cleanup
-# model = model.transform(InferShapes())
-# model = model.transform(FoldConstants())
-# model = model.transform(GiveUniqueNodeNames())
-# model = model.transform(GiveReadableTensorNames())
-# model = model.transform(InferDataTypes())
-# model = model.transform(RemoveStaticGraphInputs())
